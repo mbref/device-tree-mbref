@@ -699,10 +699,9 @@ proc get_intc_signals {intc} {
 }
 
 # Get interrupt number
-proc get_intr {ip_handle intc port_name} {
+proc get_intr_algo {intc port_handle} {
 	if {![string match "" $intc] && ![string match -nocase "none" $intc]} {
 		set intc_signals [get_intc_signals $intc]
-		set port_handle [xget_hw_port_handle $ip_handle "$port_name"]
 		set interrupt_signal [xget_value $port_handle "VALUE"]
 		set index [lsearch $intc_signals $interrupt_signal]
 		if {$index == -1} {
@@ -716,9 +715,27 @@ proc get_intr {ip_handle intc port_name} {
 	}
 }
 
-proc get_intr_type {intc ip_handle port_name} {
-	set ip_name [xget_hw_name $ip_handle]
+proc get_intr {ip_handle intc port_name} {
 	set port_handle [xget_hw_port_handle $ip_handle "$port_name"]
+	if {![string match "" $port_handle] && ![string match -nocase "none" $port_handle]} {
+		return [get_intr_algo $intc $port_handle]
+	} else {
+		debug warning "WARNING: Unknown port name was found. Can't generate correct."
+		return -1
+	}
+}
+
+proc get_intr_mhs {mhs intc connector_name} {
+	set port_handle [xget_hw_connected_ports_handle $mhs "$connector_name" "source"]
+	if {![string match "" $port_handle] && ![string match -nocase "none" $port_handle]} {
+		return [get_intr_algo $intc $port_handle]
+	} else {
+		debug warning "WARNING: Unknown connector name was found. Can't generate correct."
+		return -1
+	}
+}
+
+proc get_intr_type_algo {intc ip_name port_handle error_string} {
 	set sensitivity [xget_hw_subproperty_value $port_handle "SENSITIVITY"];
 
 	if { "[xget_hw_value $intc]" == "ps7_scugic" } {
@@ -745,7 +762,26 @@ proc get_intr_type {intc ip_handle port_name} {
 		}
 	}
 
-	error "Unknown interrupt sensitivity on port $port_name of $ip_name was $sensitivity"
+	error "Unknown interrupt sensitivity on $error_string of $ip_name was $sensitivity"
+}
+
+proc get_intr_type {intc ip_handle port_name} {
+	set ip_name [xget_hw_name $ip_handle]
+	set port_handle [xget_hw_port_handle $ip_handle "$port_name"]
+	if {![string match "" $port_handle] && ![string match -nocase "none" $port_handle]} {
+		return [get_intr_type_algo $intc $ip_name $port_handle "port $port_name"]
+	} else {
+		error "Unknown interrupt line on port $port_name of $ip_name"
+	}
+}
+
+proc get_intr_type_mhs {intc mhs connector_name} {
+	set port_handle [xget_hw_connected_ports_handle $mhs "$connector_name" "source"]
+	if {![string match "" $port_handle] && ![string match -nocase "none" $port_handle]} {
+		return [get_intr_type_algo $intc "MHS" $port_handle "connector $connector_name"]
+	} else {
+		error "Unknown interrupt line on port $port_name of $ip_name"
+	}
 }
 
 # Generate a template for a compound slave, such as the ll_temac or
@@ -3849,8 +3885,23 @@ proc gen_ranges_property_list {slave rangelist} {
 	return [list "ranges" hexinttuple $ranges]
 }
 
-proc gen_interrupt_property {tree slave intc interrupt_port_list {irq_names {}}} {
+proc gen_interrupt_property_algo {tree intc interrupt_list {irq_names {}}} {
 	set intc_name [xget_hw_name $intc]
+	if {[llength $interrupt_list] != 0} {
+		if { "[xget_hw_value $intc]" == "ps7_scugic" } {
+			set tree [tree_append $tree [list "interrupts" irqtuple3 $interrupt_list]]
+		} else {
+			set tree [tree_append $tree [list "interrupts" inttuple2 $interrupt_list]]
+		}
+		set tree [tree_append $tree [list "interrupt-parent" labelref $intc_name]]
+		if {[llength $irq_names] != 0} {
+			set tree [tree_append $tree [list "interrupt-names" stringtuple $irq_names]]
+		}
+	}
+	return $tree
+}
+
+proc gen_interrupt_property {tree slave intc interrupt_port_list {irq_names {}}} {
 	set interrupt_list {}
 	foreach in $interrupt_port_list {
 		set irq [get_intr $slave $intc $in]
@@ -3864,18 +3915,24 @@ proc gen_interrupt_property {tree slave intc interrupt_port_list {irq_names {}}}
 			}
 		}
 	}
-	if {[llength $interrupt_list] != 0} {
-		if { "[xget_hw_value $intc]" == "ps7_scugic" } {
-			set tree [tree_append $tree [list "interrupts" irqtuple3 $interrupt_list]]
-		} else {
-			set tree [tree_append $tree [list "interrupts" inttuple2 $interrupt_list]]
-		}
-		set tree [tree_append $tree [list "interrupt-parent" labelref $intc_name]]
-		if {[llength $irq_names] != 0} {
-			set tree [tree_append $tree [list "interrupt-names" stringtuple $irq_names]]
+	return [gen_interrupt_property_algo $tree $intc $interrupt_list $irq_names]
+}
+
+proc gen_interrupt_property_mhs {tree mhs intc interrupt_connector_list {irq_names {}}} {
+	set interrupt_list {}
+	foreach in $interrupt_connector_list {
+		set irq [get_intr_mhs $mhs $intc $in]
+
+		if {![string match $irq "-1"]} {
+			set irq_type [get_intr_type_mhs $intc $mhs $in]
+			if { "[xget_hw_value $intc]" == "ps7_scugic" } {
+				lappend interrupt_list 0 $irq $irq_type
+			} else {
+				lappend interrupt_list $irq $irq_type
+			}
 		}
 	}
-	return $tree
+	return [gen_interrupt_property_algo $tree $intc $interrupt_list $irq_names]
 }
 
 proc gen_reg_property {nodename baseaddr highaddr {name "reg"}} {
