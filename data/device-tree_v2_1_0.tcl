@@ -166,6 +166,14 @@ proc generate {os_handle} {
 	global buses
 	set buses {}
 
+	# FIXME: Why we have to set gpio_names here?
+	#        Why is global setup invalid? (see above around line 50)
+	# This hot fix avoid effects of missing variable in ISE 13.4 (maybe other too):
+	#   ERROR:EDK - device-tree () - can't read "gpio_names": no such variable
+	#   ERROR:EDK:3416 - Error(s) while running TCL procedure generate().
+	global gpio_names
+	set gpio_names {}
+
 	generate_device_tree "xilinx.dts" $bootargs $consoleip
 }
 
