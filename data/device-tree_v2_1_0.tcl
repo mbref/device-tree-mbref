@@ -51,6 +51,7 @@ variable microblaze_system_timer ""
 variable serial_count 0
 variable sysace_count 0
 variable ethernet_count 0
+variable mac_count 0
 variable i2c_count 0
 variable spi_count 0
 variable alias_node_list {}
@@ -1026,9 +1027,7 @@ proc slave_ll_temac_port {slave intc index} {
 
 	set ip_tree [slaveip_basic $slave $intc "" [format_ip_name "ethernet" $baseaddr $subnode_name]]
 	set ip_tree [tree_append $ip_tree [list "device_type" string "network"]]
-	variable mac_count
-	set ip_tree [tree_append $ip_tree [list "local-mac-address" bytesequence [list 0x00 0x0a 0x35 0x00 0x00 $mac_count]]]
-	incr mac_count
+	set ip_tree [gen_macaddr $ip_tree]
 
 	set ip_tree [tree_append $ip_tree [gen_reg_property $name $baseaddr $highaddr]]
 	set ip_tree [gen_interrupt_property $ip_tree $slave $intc [format "TemacIntc%d_Irpt" $index]]
@@ -1309,7 +1308,6 @@ proc ps7_reset_handle {ip_tree slave param_name name} {
 
 proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 	variable phy_count
-	variable mac_count
 
 	if { [llength $force_type] != 0 } {
 		set name $force_type
@@ -1584,8 +1582,7 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 			# 'network' type
 			set ip_tree [slaveip_intr $slave $intc [interrupt_list $slave] "ethernet" [default_parameters $slave]]
 			set ip_tree [tree_append $ip_tree [list "device_type" string "network"]]
-			set ip_tree [tree_append $ip_tree [list "local-mac-address" bytesequence [list 0x00 0x0a 0x35 0x00 0x00 $mac_count]]]
-			incr mac_count
+			set ip_tree [gen_macaddr $ip_tree]
 
 			if {$type == "xps_ethernetlite" || $type == "axi_ethernetlite"} {
 				if {[parameter_exists $slave "C_INCLUDE_MDIO"]} {
@@ -1618,8 +1615,7 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 
 			set ip_tree [slaveip_basic $slave $intc "" [format_ip_name "axi-ethernet" $baseaddr $name]]
 			set ip_tree [tree_append $ip_tree [list "device_type" string "network"]]
-			set ip_tree [tree_append $ip_tree [list "local-mac-address" bytesequence [list 0x00 0x0a 0x35 0x00 0x00 $mac_count]]]
-			incr mac_count
+			set ip_tree [gen_macaddr $ip_tree]
 			set phy_name "phy$phy_count"
 			set ip_tree [tree_append $ip_tree [list "phy-handle" labelref $phy_name]]
 
@@ -3694,6 +3690,19 @@ proc format_ip_name {devicetype baseaddr {label ""}} {
 	} else {
 		return [format "%s: %s" $label $node_name]
 	}
+}
+
+proc gen_macaddr {ip_tree} {
+	variable mac_count
+
+	set seed4 [clock seconds]
+	set seed5 [clock clicks]
+	set mac_rand_b4 [expr $seed4 % 256]
+	set mac_rand_b5 [expr $seed5 % 256]
+	set ip_tree [tree_append $ip_tree [list "local-mac-address" bytesequence [list 0x00 0x0a 0x35 $mac_rand_b4 $mac_rand_b5 $mac_count]]]
+	incr mac_count
+
+	return $ip_tree
 }
 
 # TODO: remove next two lines which is a temporary HACK for CR 532315
