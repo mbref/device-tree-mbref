@@ -35,4 +35,8 @@ PARAMETER name = bootargs, desc = "Booting arguments", type = string, default = 
 PARAMETER name = console device, desc = "Instance name of IP core for boot console (e.g. RS232_Uart_1, not xps_uart16550)", type = peripheral_instance, range=(opb_uartlite, xps_uartlite, xps_uart16550, opb_uart16550, opb_mdm, plb_uart16550, axi_uart16550, axi_uartlite, ps7_uart), default = "";
 
 PARAMETER name = periph_type_overrides, desc = "List of peripheral type overrides", type = string, default = "";
+
+PARAMETER name = flash_memory, DESC = "flash memory (mainly NOR via CFI or SPI)", TYPE = peripheral_instance, RANGE = (opb_emc, plb_emc, mch_opb_emc, xps_mch_emc, axi_emc, xps_spi, axi_spi, axi_quad_spi, ps7_spi), DEFAULT = none;
+PARAMETER name = flash_memory_bank, DESC = "bank within memory controller of flash memory (SPI: slave select)", TYPE = int, DEFAULT = 0;
+
 END OS
