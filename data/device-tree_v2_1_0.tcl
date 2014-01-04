@@ -1994,6 +1994,7 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 				set sck_ratio [scan_int_parameter_value $slave "C_SCK_RATIO"]
 				set sck [expr { $sys_clk / $sck_ratio }]
 				lappend subnode [list [format_name "spi-max-frequency"] int $sck]
+				lappend subnode [gen_compatible_property "primary_flash" "" "" "spi-flash"]
 				set tree [tree_append $tree [list [format_ip_name $type $flash_memory_bank "primary_flash"] tree $subnode]]
 			}
 			lappend node $tree
@@ -2175,6 +2176,7 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 				# Note this is not the actual maximum SPI flash frequency
 				# as we can't know.
 				lappend subnode [list [format_name "spi-max-frequency"] int [expr [xget_sw_parameter_value $slave "C_QSPI_CLK_FREQ_HZ"]/4]]
+				lappend subnode [gen_compatible_property "primary_flash" "" "" "spi-flash"]
 				set ip_tree [tree_append $ip_tree [list [format_ip_name $type $flash_memory_bank "primary_flash"] tree $subnode]]
 			}
 
@@ -2244,6 +2246,7 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 				# Set the SPI Flash clock freqeuncy
 				# hardcode this spi-max-frequency (based on board_zc770_xm010.c)
 				lappend subnode [list [format_name "spi-max-frequency"] int 75000000]
+				lappend subnode [gen_compatible_property "primary_flash" "" "" "spi-flash"]
 				set ip_tree [tree_append $ip_tree [list [format_ip_name $type $flash_memory_bank "primary_flash"] tree $subnode]]
 			}
 
