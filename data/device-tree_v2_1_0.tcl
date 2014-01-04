@@ -56,6 +56,7 @@ variable i2c_count 0
 variable spi_count 0
 variable alias_node_list {}
 variable phy_count 0
+variable rtc_count 0
 variable trafgen_count 0
 
 variable vdma_device_id 0
@@ -542,6 +543,71 @@ proc headerc {ufile generator_version} {
 	puts $ufile " * XPS project directory: [prj_dir]"
 	puts $ufile " */"
 	puts $ufile ""
+}
+
+# generate structure for RTC chip on iic.
+# {key-word IP_name chip_compat chip_addr chip_irq_connector}
+# chip_irq_connector can lack for chips without interrupt line
+#
+# PARAMETER periph_type_overrides = {rtc-iic IIC_Bus 0x68 dallas,ds3232 fpga_0_RTC_Int_pin}
+proc rtc_iic {slave intc} {
+	global overrides
+	variable rtc_count
+	set tree {}
+	foreach over $overrides {
+		# parse rtc-iic keyword
+		if {[lindex $over 0] == "rtc-iic"} {
+			# search if that iic name is valid IP core in system
+			set desc [valid_iic [xget_hw_name $slave] [lindex $over 1]]
+			if { "$desc" != "" } {
+				set addr [valid_iic_addr [lindex $over 2]]
+				set compat [lindex $over 3]
+				# check if is a compat string and valid iic address
+				if { "$addr" != "" && "$compat" != "" } {
+					set devicetype [xget_hw_value $slave]
+					set name [format_ip_name $devicetype $addr "rtc$rtc_count"]
+					set tree [list $name tree {}]
+					set tree [tree_append $tree [list "reg" hexinttuple $addr]]
+					set tree [tree_append $tree [list "device_type" string "rtc"]]
+					set tree [tree_append $tree [list "compatible" string $compat]]
+					set connect [lindex $over 4]
+					# check if is a interrup connection
+					if { "$connect" != "" } {
+						set proc_handle [xget_libgen_proc_handle]
+						set hwproc_handle [xget_handle $proc_handle "IPINST"]
+						set mhs_handle [xget_hw_parent_handle $hwproc_handle]
+						set tree [gen_interrupt_property_mhs $tree $mhs_handle $intc [list $connect]]
+					}
+					incr rtc_count
+				} else {
+					debug warning "WARNING: RTC-IIC: Missing compat-name or wrong address. Can't generate correct."
+				}
+# NOT APPLICABLE	} else {
+# NOT APPLICABLE		puts "RTC-IIC: Not valid IP name $over"
+			}
+		}
+	}
+	return $tree
+}
+
+# Check if iic name is valid or not
+proc valid_iic {slave_name over_name} {
+	if { "$slave_name" == "$over_name" } {
+		return $slave_name
+	}
+	return
+}
+
+# Check if iic addr is valid or not
+proc valid_iic_addr {addr} {
+	if { ![string match "" $addr] && [expr {$addr & 0x7f}]
+	&& $addr != 1 && $addr != 2 && $addr != 3 && $addr != 4
+	&& $addr != 5 && $addr != 6 && $addr != 7 && $addr != 0x78
+	&& $addr != 0x79 && $addr != 0x7a && $addr != 0x7b && $addr != 0x7c
+	&& $addr != 0x7d && $addr != 0x7e && $addr != 0x7f } {
+		return $addr
+	}
+	return
 }
 
 # generate structure for reset gpio.
@@ -1954,7 +2020,16 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 			incr i2c_count
 
 			# We should handle this specially, to report two ports.
-			lappend node [slaveip_intr $slave $intc [interrupt_list $slave] "i2c" [default_parameters $slave]]
+			set ip_tree [slaveip_intr $slave $intc [interrupt_list $slave] "i2c" [default_parameters $slave]]
+			# If it is a I2C/RTC, we will add a RTC subnode to the I2C controller
+			set ip_rtctree [rtc_iic $slave $intc]
+			if { "$ip_rtctree" != "" } {
+				# Add the address-cells and size-cells to make the DTC compiler stop outputing warning
+				set ip_tree [tree_append $ip_tree [list "#address-cells" int "1"]]
+				set ip_tree [tree_append $ip_tree [list "#size-cells" int "0"]]
+				set ip_tree [tree_append $ip_tree $ip_rtctree]
+			}
+			lappend node $ip_tree
 		}
 		"xps_spi" -
 		"axi_quad_spi" -
