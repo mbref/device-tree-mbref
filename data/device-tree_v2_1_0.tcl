@@ -3806,6 +3806,7 @@ proc gen_compatible_property {nodename type hw_ver {other_compatibles {}} } {
 		{axi_perf_mon} {axi_perf_monitor} \
 	]
 
+	set clist {}
 	if {$hw_ver != ""} {
 		set namewithver [format "%s_%s" $type $hw_ver]
 		set clist [list [format_xilinx_name "$namewithver"]]
@@ -3826,7 +3827,7 @@ proc gen_compatible_property {nodename type hw_ver {other_compatibles {}} } {
 				}
 			}
 		}
-	} else {
+	} elseif {$type != ""} {
 		set clist [list [format_xilinx_name "$type"]]
 	}
 	set clist [concat $clist $other_compatibles]
