@@ -1044,17 +1044,6 @@ proc gen_intc {slave intc devicetype param {prefix ""} {other_compatibles {}}} {
 	return [list $intc_name tree $intc_node]
 }
 
-proc ll_temac_parameters {ip_handle index} {
-	set params {}
-	foreach param [default_parameters $ip_handle] {
-		set pattern [format "C_TEMAC%d*" $index]
-		if {[string match $pattern $param]} {
-			lappend params $param
-		}
-	}
-	return $params
-}
-
 # Generate a slaveip, assuming it is inside a compound that has a
 # baseaddress and reasonable ranges.
 # index: The index of this slave
@@ -1072,6 +1061,17 @@ proc slaveip_in_compound_intr {slave intc interrupt_port_list devicetype paramet
 	set ip_tree [tree_append $ip_tree [gen_reg_property $name $baseaddr $highaddr]]
 	set ip_tree [gen_interrupt_property $ip_tree $slave $intc $interrupt_port_list]
 	return $ip_tree
+}
+
+proc ll_temac_parameters {ip_handle index} {
+	set params {}
+	foreach param [default_parameters $ip_handle] {
+		set pattern [format "C_TEMAC%d*" $index]
+		if {[string match $pattern $param]} {
+			lappend params $param
+		}
+	}
+	return $params
 }
 
 proc slave_ll_temac_port {slave intc index} {
