@@ -1063,6 +1063,70 @@ proc slaveip_in_compound_intr {slave intc interrupt_port_list devicetype paramet
 	return $ip_tree
 }
 
+proc slave_s2imac_epc {slave intc} {
+	set name [xget_hw_name $slave]
+
+	# Add this s2imac_epc to the alias list
+	variable ethernet_count
+	variable alias_node_list
+	lappend alias_node_list [list ethernet$ethernet_count aliasref $name $ethernet_count]
+	incr ethernet_count
+
+	# check if is any parameter BASEADDR (epc slot 0..3)
+	set ip_params [xget_hw_parameter_handle $slave "*"]
+	set address_array {}
+	set ranges_list {}
+	foreach par_name $ip_params {
+		# check all
+		set addrtype [xget_hw_subproperty_value $par_name "ADDRESS"]
+		if {[string compare -nocase $addrtype "BASE"] == 0} {
+			set base [xget_hw_name $par_name]
+			set high [xget_hw_subproperty_value $par_name "PAIR"]
+			set baseaddr [scan_int_parameter_value $slave $base]
+			set highaddr [scan_int_parameter_value $slave $high]
+			if { "${baseaddr}" < "${highaddr}" } {
+				lappend address_array $par_name
+				# Also compound ranges list with all BASEADDR and HIGHADDR pairs
+				lappend ranges_list [list $baseaddr $highaddr $baseaddr]
+			}
+		}
+	}
+
+	# decide into reg or range to fetch (epc slot 0..3)
+	switch [llength $address_array] {
+		"0" {
+			# maybe just IP just with interrupt line
+			set ip_tree [slaveip_basic $slave $intc [default_parameters $slave] [format_ip_name "ethernet" $baseaddr $name] "s2i,s2imac-epc"]
+			set ip_tree [gen_interrupt_property $ip_tree $slave $intc [interrupt_list $slave]]
+		}
+		"1" {
+			# address_array has only one baseaddr which means that it is single node
+			set par_name $address_array
+			set base [xget_hw_name $par_name]
+			set high [xget_hw_subproperty_value $par_name "PAIR"]
+			set baseaddr [scan_int_parameter_value $slave $base]
+			set highaddr [scan_int_parameter_value $slave $high]
+			set ip_tree [slaveip_explicit_baseaddr $slave $intc "ethernet" [default_parameters $slave] $baseaddr $highaddr "s2i,s2imac-epc"]
+			set ip_tree [gen_interrupt_property $ip_tree $slave $intc [interrupt_list $slave]]
+		}
+		default {
+			# Use the first BASEADDR parameter to be in node name - order is directed by mpd
+			set ip_tree [slaveip_basic $slave $intc [default_parameters $slave] [format_ip_name "ethernet" [lindex $ranges_list 0 0] $name] "s2i,s2imac-epc"]
+			set ip_tree [tree_append $ip_tree [list \#size-cells int 1]]
+			set ip_tree [tree_append $ip_tree [list \#address-cells int 1]]
+			set ip_tree [tree_append $ip_tree [gen_ranges_property_list $slave $ranges_list]]
+			set ip_tree [gen_interrupt_property $ip_tree $slave $intc [interrupt_list $slave]]
+		}
+	}
+
+	# 'network' type
+	set ip_tree [tree_append $ip_tree [list "device_type" string "network"]]
+	set ip_tree [gen_macaddr $ip_tree]
+
+
+	return $ip_tree
+}
+
 proc ll_temac_parameters {ip_handle index} {
 	set params {}
 	foreach param [default_parameters $ip_handle] {
@@ -1674,6 +1738,11 @@ proc gener_slave {node slave intc {force_type ""} {busif_handle ""}} {
 			# We need to handle this specially, to notify the driver
 			# about the connected LL connection, and the dual cores.
 			lappend node [slave_ll_temac $slave $intc]
+		}
+		"s2imac_epc" {
+			# We need to handle this specially, to notify the driver
+			# about the connected S2IMAC connection, and the dual cores.
+			lappend node [slave_s2imac_epc $slave $intc]
 		}
 		"axi_ethernet_buffer" -
 		"axi_ethernet" {
