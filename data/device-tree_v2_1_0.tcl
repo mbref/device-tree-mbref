@@ -126,6 +126,11 @@ proc generate {os_handle} {
 	debug info "\#--------------------------------------"
 
 	set bootargs [xget_sw_parameter_value $os_handle "bootargs"]
+	if {[llength $bootargs] == 0} {
+		# TPOS provides linux_bootargs in MLD to differentiate from other OS
+		set bootargs [xget_sw_parameter_value $os_handle "linux_bootargs"]
+	}
+
 	global consoleip
 	set consoleip [xget_sw_parameter_value $os_handle "stdout"]
 	if {[llength $consoleip] == 0} {
